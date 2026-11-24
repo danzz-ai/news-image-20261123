@@ -1,21 +1,25 @@
 // news-image-20261123 — "The World Today — 23 November 2026".
-// The entry is a single image, entry.png, drawn by render_front_page.py.
-// This program only copies it to the grader's output directory, so every
-// run writes exactly the same bytes. Node 22, standard library only.
-//
-// Run locally: mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// The entry is one pre-rendered image. This program copies entry.png into
+// the directory the grader passes in, so both grader runs write identical
+// bytes. Node 22, standard library only.
 
-import { copyFileSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { dirname, join } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-const src = new URL("./entry.png", import.meta.url);
-const dest = join(outDir, "entry.png");
-copyFileSync(src, dest);
-
-// Fail loudly instead of silently shipping a partial copy: the two runs
-// the grader makes must write the same bytes, so a short copy is an error.
-if (statSync(dest).size !== statSync(src).size) {
-  throw new Error(`entry.png copy incomplete: ${statSync(dest).size} bytes`);
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
+const sourcePath = fileURLToPath(new URL("./entry.png", import.meta.url));
+if (!existsSync(sourcePath)) {
+  throw new Error(`entry.png missing next to main.ts: ${sourcePath}`);
 }
-console.log(`wrote ${dest} ${statSync(dest).size} bytes`);
+const targetPath = join(outputDir, "entry.png");
+
+mkdirSync(dirname(targetPath), { recursive: true });
+copyFileSync(sourcePath, targetPath);
+
+const sourceSize = statSync(sourcePath).size;
+const targetSize = statSync(targetPath).size;
+if (targetSize !== sourceSize) {
+  throw new Error(`incomplete copy: wrote ${targetSize} of ${sourceSize} bytes`);
+}
+console.log(`entry.png -> ${targetPath} (${targetSize} bytes)`);

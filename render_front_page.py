@@ -1,179 +1,191 @@
 #!/usr/bin/env python3
-"""Draw the news-image-20261123 front page: 'The World Today — 23 November 2026'.
+"""Render the front page for news-image-20261123.
 
-A newspaper front page rendered with PIL so every headline and the date are
-crisp and legible. Output: entry.png (a JPEG, 1024x1024, under 1 MiB).
-All stories were reported on Monday 23 November 2026.
+"The World Today - 23 November 2026": one 1024x1024 JPEG summing up the
+day's world news, drawn with Pillow and DejaVu fonts. No network, no AI
+image generation - every element is drawn from the story list below.
 """
+
 import os
-import random
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 
 W, H = 1024, 1024
-OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
 
-PAPER = (247, 243, 233)
-INK = (17, 17, 17)
-RED = (179, 32, 44)
-GREY = (90, 86, 78)
-PANEL = (255, 253, 246)
-HERO_BG = (10, 26, 48)
-HERO_BG2 = (16, 48, 84)
+CREAM = (245, 241, 232)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+RED = (163, 30, 34)
+NAVY = (13, 27, 62)
+GOLD = (201, 162, 39)
+GREY = (105, 105, 105)
+INK = (35, 35, 35)
+SKYLINE = (4, 8, 20)
 
-SERIF_B = "/usr/share/fonts/truetype/dejavu/DejaVuSerif-Bold.ttf"
-SERIF = "/usr/share/fonts/truetype/dejavu/DejaVuSerif.ttf"
-SANS_B = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-SANS = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+SERIF_BOLD = "DejaVuSerif-Bold.ttf"
+SERIF = "DejaVuSerif.ttf"
+SANS_BOLD = "DejaVuSans-Bold.ttf"
+
+FONT_DIRS = [
+    "/usr/share/fonts/truetype/dejavu",
+    "/usr/share/fonts/dejavu",
+    "/usr/local/share/fonts",
+]
 
 
-def font(path, size):
-    return ImageFont.truetype(path, size)
+def load_font(name, size):
+    for folder in FONT_DIRS:
+        path = os.path.join(folder, name)
+        if os.path.exists(path):
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default(size)
 
 
-def wrap(draw, text, fnt, max_w):
-    """Greedy word wrap; returns a list of lines that fit max_w."""
-    lines, cur = [], ""
-    for word in text.split():
-        trial = f"{cur} {word}".strip()
-        if draw.textlength(trial, font=fnt) <= max_w:
-            cur = trial
+def wrap(draw, text, font, max_width):
+    words = text.split()
+    lines = []
+    current = ""
+    for word in words:
+        trial = (current + " " + word).strip()
+        if draw.textlength(trial, font=font) <= max_width:
+            current = trial
         else:
-            if cur:
-                lines.append(cur)
-            cur = word
-    if cur:
-        lines.append(cur)
+            if current:
+                lines.append(current)
+            current = word
+    if current:
+        lines.append(current)
     return lines
 
 
-def draw_center(draw, cx, y, text, fnt, fill):
-    draw.text((cx - draw.textlength(text, font=fnt) / 2, y), text, font=fnt, fill=fill)
+def fit_text(draw, text, font_name, start_size, max_width, max_lines, min_size=12):
+    size = start_size
+    while size > min_size:
+        font = load_font(font_name, size)
+        lines = wrap(draw, text, font, max_width)
+        if len(lines) <= max_lines:
+            return font, lines
+        size -= 1
+    font = load_font(font_name, min_size)
+    return font, wrap(draw, text, font, max_width)
 
 
-def hero_art(base):
-    """Night sky over a chip skyline: glowing circuit nodes, gold horizon."""
-    art = Image.new("RGB", (968, 100), HERO_BG2)
-    d = ImageDraw.Draw(art)
-    # sky gradient bands
-    for i in range(100):
-        t = i / 99
-        d.line([(0, i), (968, i)],
-               fill=(int(16 + 10 * t), int(48 + 18 * t), int(84 + 20 * t)))
-    rng = random.Random(23112026)
-    # circuit nodes scattered in the sky
-    for _ in range(46):
-        x, y = rng.randint(0, 967), rng.randint(0, 45)
-        r = rng.choice([1, 1, 2])
-        d.ellipse([x - r, y - r, x + r, y + r], fill=(190, 214, 235))
-    # a few thin circuit traces
-    for _ in range(8):
-        x, y = rng.randint(0, 900), rng.randint(0, 40)
-        d.line([(x, y), (x + rng.randint(20, 60), y)], fill=(120, 160, 200), width=1)
-    # pale glow, right third — centred higher so it sits in the sky,
-    # clear of the dark band at the bottom of the art panel
-    glow = Image.new("RGB", (968, 100), (0, 0, 0))
-    gd = ImageDraw.Draw(glow)
-    for r, col in ((58, (120, 190, 255)), (38, (170, 215, 255)), (22, (220, 238, 255))):
-        gd.ellipse([790 - r, 44 - r, 790 + r, 44 + r], fill=col)
-    glow = glow.filter(ImageFilter.GaussianBlur(12))
-    art = Image.blend(art, Image.composite(glow, Image.new("RGB", (968, 100), (0, 0, 0)),
-                                            glow.convert("L").point(lambda v: v)), 0.85)
-    d = ImageDraw.Draw(art)
-    # thin gold horizon line above the skyline
-    d.line([(0, 73), (968, 73)], fill=(255, 214, 130), width=2)
-    # dark skyline along the bottom
-    d.rectangle([0, 74, 968, 100], fill=(6, 18, 34))
-    for x, w, h in ((0, 90, 22), (110, 60, 32), (200, 130, 18), (360, 70, 28),
-                    (470, 110, 20), (620, 80, 34), (730, 120, 22), (880, 88, 30)):
-        d.rectangle([x, 100 - h, x + w, 100], fill=(3, 10, 20))
-    return art
+def draw_lines(draw, lines, x, y, font, fill, leading):
+    for line in lines:
+        draw.text((x, y), line, font=font, fill=fill)
+        y += leading
+    return y
+
+
+PANELS = [
+    ("NATO • POLAND", "NATO sends jets to Poland",
+     "Early-warning aircraft head to Poland after Russian missiles landed; "
+     "Warsaw summons Moscow's envoy."),
+    ("EUROPE", "EU unveils 22nd Russia sanctions",
+     "Brussels targets Russian banks, crypto, the shadow fleet and sport "
+     "in its latest package."),
+    ("WASHINGTON", "US sanctions Iran shadow banks",
+     "Treasury blacklists more than two dozen Iranian entities tied to "
+     "shadow banking networks."),
+    ("TRADE • ASIA", "US blacklists AI firm Megaspeed",
+     "Commerce bars the Nvidia partner over alleged AI-chip diversion "
+     "to China."),
+    ("LONDON • HEALTH", "NHS launches AI cancer trial",
+     "The world's largest AI breast screening trial starts; 700,000 women, "
+     "30 sites, £10m."),
+    ("COLOMBIA", "Drones hit police base in Cúcuta",
+     "Explosive drones injure three civilians, including an infant, and "
+     "damage 60 homes."),
+]
 
 
 def main():
-    img = Image.new("RGB", (W, H), PAPER)
-    d = ImageDraw.Draw(img)
-    d.rectangle([6, 6, W - 7, H - 7], outline=INK, width=3)
+    img = Image.new("RGB", (W, H), CREAM)
+    draw = ImageDraw.Draw(img)
 
-    # ---- masthead ----
-    draw_center(d, W // 2, 12, "THE WORLD TODAY", font(SERIF_B, 72), INK)
-    d.line([(28, 108), (996, 108)], fill=INK, width=3)
-    d.line([(28, 114), (996, 114)], fill=INK, width=1)
-    draw_center(d, W // 2, 124, "MONDAY, 23 NOVEMBER 2026",
-                font(SANS_B, 30), RED)
-    d.line([(28, 164), (996, 164)], fill=INK, width=2)
+    # Outer border.
+    draw.rectangle([8, 8, W - 9, H - 9], outline=BLACK, width=3)
 
-    # ---- hero ----
-    hx0, hy0, hx1, hy1 = 28, 174, 996, 490
-    d.rectangle([hx0, hy0, hx1, hy1], fill=HERO_BG)
-    d.text((hx0 + 20, hy0 + 12), "TECH  •  SILICON VALLEY  •  LEAD STORY",
-           font=font(SANS_B, 19), fill=(255, 214, 130))
-    d.text((hx0 + 20, hy0 + 42), "HUANG IS BACK",
-           font=font(SERIF_B, 54), fill=(255, 255, 255))
-    d.text((hx0 + 20, hy0 + 100), "AT NVIDIA",
-           font=font(SERIF_B, 54), fill=(255, 255, 255))
-    deck = ("Nvidia's board unanimously reinstates Jensen Huang as chief "
-            "executive, 11 days after he resigned. Shares jump about 30%.")
-    y = hy0 + 164
-    for line in wrap(d, deck, font(SANS, 21), hx1 - hx0 - 40):
-        d.text((hx0 + 20, y), line, font=font(SANS, 21), fill=(215, 228, 238))
-        y += 27
-    img.paste(hero_art(img), (hx0, hy1 - 100))
+    # Masthead.
+    masthead = load_font(SERIF_BOLD, 76)
+    draw.text((W // 2, 26), "THE WORLD TODAY", font=masthead, fill=BLACK, anchor="mt")
 
-    # ---- panels ----
-    def panel(x0, y0, x1, y1, kicker, headline, deck_text, head_size=24):
-        d.rectangle([x0, y0, x1, y1], fill=PANEL, outline=(150, 146, 136), width=1)
-        d.text((x0 + 14, y0 + 10), kicker, font=font(SANS_B, 16), fill=RED)
-        y = y0 + 34
-        for line in wrap(d, headline, font(SERIF_B, head_size), x1 - x0 - 28):
-            d.text((x0 + 14, y), line, font=font(SERIF_B, head_size), fill=INK)
-            y += head_size + 6
-        y += 4
-        for line in wrap(d, deck_text, font(SANS, 16), x1 - x0 - 28):
-            d.text((x0 + 14, y), line, font=font(SANS, 16), fill=(52, 50, 46))
-            y += 20
+    # Date line with rules above and below.
+    draw.line([(28, 116), (W - 28, 116)], fill=BLACK, width=2)
+    date_font = load_font(SERIF_BOLD, 34)
+    draw.text((W // 2, 126), "MONDAY, 23 NOVEMBER 2026", font=date_font, fill=RED, anchor="mt")
+    draw.line([(28, 170), (W - 28, 170)], fill=BLACK, width=2)
 
-    d.line([(28, 504), (996, 504)], fill=INK, width=2)
-    panel(28, 516, 340, 698, "NATO  •  POLAND",
-          "NATO sends jets to Poland",
-          "Early-warning aircraft head to Poland after Russian missiles "
-          "landed; Warsaw summons Moscow's envoy.")
-    panel(356, 516, 668, 698, "EUROPE",
-          "EU unveils 22nd Russia sanctions",
-          "Brussels targets Russian banks, crypto, the shadow fleet and "
-          "sport in its latest package.")
-    panel(684, 516, 996, 698, "WASHINGTON",
-          "US sanctions Iran shadow banks",
-          "Treasury blacklists more than two dozen Iranian entities tied "
-          "to shadow banking networks.")
-    d.line([(28, 710), (996, 710)], fill=INK, width=2)
-    panel(28, 722, 340, 904, "TRADE  •  ASIA",
-          "US blacklists AI firm Megaspeed",
-          "Commerce bars the Nvidia partner over alleged AI-chip diversion "
-          "to China.")
-    panel(356, 722, 668, 904, "LONDON  •  HEALTH",
-          "NHS launches AI cancer trial",
-          "The world's largest AI breast screening trial starts; 700,000 "
-          "women, 30 sites, £10m.")
-    panel(684, 722, 996, 904, "COLOMBIA",
-          "Drones hit police base in Cúcuta",
-          "Explosive drones injure three civilians, including an infant, "
-          "and damage 60 homes.")
+    # Hero band.
+    draw.rectangle([20, 182, 1004, 500], fill=NAVY)
+    kicker = load_font(SANS_BOLD, 20)
+    draw.text((44, 198), "TECH • SILICON VALLEY • LEAD STORY", font=kicker, fill=GOLD)
+    headline = load_font(SERIF_BOLD, 62)
+    draw.text((44, 226), "HUANG IS BACK", font=headline, fill=WHITE)
+    draw.text((44, 292), "AT NVIDIA", font=headline, fill=WHITE)
+    body_font = load_font(SERIF, 23)
+    hero_body = ("Nvidia's board unanimously reinstates Jensen Huang as chief "
+                 "executive, 11 days after he resigned. Shares jump about 30%.")
+    hero_lines = wrap(draw, hero_body, body_font, 940)
+    draw_lines(draw, hero_lines, 44, 362, body_font, WHITE, 30)
 
-    # ---- ticker ----
-    tick1 = ("Russia rules out new Black Sea grain deal  •  Zelensky warns "
-             "of new Russian strikes")
-    tick2 = ("Riemann proof clears machine checks  •  Tajikistan quits ICC  •  "
-             "Trump limits Congress data demands")
-    d.rectangle([28, 916, 996, 980], fill=INK)
-    d.text((44, 924), "ALSO TODAY", font=font(SANS_B, 17), fill=(255, 214, 130))
-    d.text((188, 924), tick1, font=font(SANS, 16), fill=(255, 255, 255))
-    d.text((44, 950), tick2, font=font(SANS, 16), fill=(255, 255, 255))
+    # Decorative strip: skyline silhouette, glowing orb, gold horizon line.
+    buildings = [
+        (20, 56, 34), (84, 30, 52), (122, 52, 26), (182, 36, 44),
+        (226, 60, 30), (294, 34, 56), (336, 48, 36), (392, 30, 48),
+        (430, 56, 28), (494, 40, 50), (542, 32, 38), (582, 54, 30),
+        (644, 36, 52), (688, 48, 34), (744, 30, 46), (782, 56, 28),
+        (846, 40, 50), (894, 34, 40), (936, 68, 30),
+    ]
+    for x, w, h in buildings:
+        draw.rectangle([x, 500 - h, x + w, 500], fill=SKYLINE)
+    strip = Image.new("RGBA", (984, 72), (0, 0, 0, 0))
+    sd = ImageDraw.Draw(strip)
+    cx, cy = 810, 40
+    for radius, alpha in [(58, 25), (46, 45), (34, 80), (24, 130)]:
+        sd.ellipse([cx - radius, cy - radius, cx + radius, cy + radius],
+                   fill=(255, 214, 120, alpha))
+    sd.ellipse([cx - 16, cy - 16, cx + 16, cy + 16], fill=(255, 232, 170, 230))
+    img.paste(strip, (20, 428), strip)
+    draw = ImageDraw.Draw(img)
+    draw.line([(28, 494), (996, 494)], fill=GOLD, width=2)
 
-    draw_center(d, W // 2, 988, "All stories reported Monday 23 November 2026  •  The World Today",
-                font(SANS, 14), GREY)
+    # Six panels in two rows of three.
+    card_w, card_h = 320, 184
+    xs = [20, 352, 684]
+    ys = [512, 708]
+    for row, y0 in enumerate(ys):
+        for col, x0 in enumerate(xs):
+            kicker_text, headline_text, body_text = PANELS[row * 3 + col]
+            draw.rectangle([x0, y0, x0 + card_w, y0 + card_h],
+                           fill=WHITE, outline=BLACK, width=1)
+            kfont = load_font(SANS_BOLD, 16)
+            draw.text((x0 + 14, y0 + 12), kicker_text, font=kfont, fill=RED)
+            hfont, hlines = fit_text(draw, headline_text, SERIF_BOLD, 26, 292, 2)
+            draw_lines(draw, hlines, x0 + 14, y0 + 36, hfont, BLACK, 30)
+            bfont, blines = fit_text(draw, body_text, SERIF, 17, 292, 3)
+            draw_lines(draw, blines, x0 + 14, y0 + 102, bfont, INK, 21)
 
-    img.save(OUT, format="JPEG", quality=88, optimize=True)
-    print(f"wrote {OUT} {os.path.getsize(OUT)} bytes")
+    # Ticker strip.
+    draw.rectangle([20, 902, 1004, 962], fill=BLACK)
+    label_font = load_font(SANS_BOLD, 18)
+    label = "ALSO TODAY"
+    draw.text((36, 922), label, font=label_font, fill=GOLD)
+    label_w = draw.textlength(label, font=label_font)
+    ticker_text = ("Russia rules out new Black Sea grain deal • Zelensky warns of new "
+                   "Russian strikes • Riemann proof clears machine checks • "
+                   "Tajikistan quits ICC • Trump limits Congress data demands")
+    text_x = 36 + label_w + 16
+    tfont, tlines = fit_text(draw, ticker_text, SERIF, 15, 1004 - 16 - text_x, 2)
+    draw_lines(draw, tlines, text_x, 916, tfont, WHITE, 20)
+
+    # Footer.
+    footer_font = load_font(SERIF, 15)
+    draw.text((W // 2, 974), "All stories reported Monday 23 November 2026 • The World Today",
+              font=footer_font, fill=GREY, anchor="mt")
+
+    out_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "entry.png")
+    img.save(out_path, "JPEG", quality=92)
+    print("wrote %s %d bytes" % (out_path, os.path.getsize(out_path)))
 
 
 if __name__ == "__main__":
